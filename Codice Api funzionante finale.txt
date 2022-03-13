@@ -1,0 +1,420 @@
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <malloc.h>
+
+#define DIMSTRINGA 1024
+#define VIRGOLA ","
+#define DIMSTRUTTURE 10000
+#define DIMREALLOC 5000
+
+typedef struct {
+    char *frase;
+    int idIstr;
+    int riga;
+    int numFrasi;
+    char cmd;
+} modifica;
+
+typedef struct{
+    char **frasi;
+    int hFrasi;
+}stato;
+
+void leggiInd1_Ind2(int *, int *, char *);
+
+char** copiaVetFrasi(char**, int, int);
+
+void visStati(stato *vetStati, int hStati);
+
+int main() {
+    char vetIstr[DIMSTRINGA + 1]; // Stringa in cui salvare l'istruzione
+    char vetFraseAppo[DIMSTRINGA + 1];
+    char **vetFrasi; // Puntatore al primo elemento del vettore delle frasi
+    int hFrasi; // Indice ultimo elemento della struttura
+    int dimFrasi; // Dimensione della struttura
+    int idIstr; // ID dell'istruzione
+    int contaUndo; // Contatore degli undo(se negativo conta i redo)
+    int ind1, ind2; // Indirizzi delle istruzioni c e d
+    stato *vetStati;
+    char ** vetFrasiAppo;
+    int hStati;
+
+    char *indMalloc; // Indirizzo ritornato dalla malloc delle frasi
+    int numFrasi; // Numero di frasi dell'istruzione
+    int i;
+    int numPunti;
+    int repeat;
+    int appoUndo, appoRedo;
+    int isIstrIn;
+    int len;
+    int numIstrStackMod, numIstrStackRedo;
+    int setUndo;
+    int contaPrint, printFatte;
+    int max;
+    int j;
+    int contaStati;
+
+    hFrasi = -1;
+    hStati = -1;
+    dimFrasi = DIMSTRUTTURE;
+    idIstr = 0;
+
+    setUndo = 0;
+    contaPrint = 0;
+    max = 0;
+    contaStati = 0;
+
+    while (1) {
+        fgets(vetIstr, DIMSTRINGA, stdin);
+
+        i = 0;
+        while (vetIstr[i + 1] != '\0') {
+            i++;
+        }
+
+        if (vetIstr[i] == '\n') {
+            vetIstr[i] = '\0';
+            i = i - 1;
+        }
+
+        if (vetIstr[i] == 'q')
+            break;
+
+        switch (vetIstr[i]) {
+            case 'd':
+                contaStati ++;
+                break;
+            case 'u':
+                setUndo = 1;
+                vetIstr[i] = '\0';
+                break;
+            case 'p':
+                contaPrint = contaPrint + 1;
+                break;
+            case 'c':
+                leggiInd1_Ind2(&ind1, &ind2, vetIstr);
+                if (ind2 > max)
+                    max = ind2;
+                contaStati ++;
+        }
+    }
+
+    fseek(stdin, 0, SEEK_SET);
+
+    //Allocazione Strutture:
+    vetFrasi = (char **) malloc(sizeof(char *) * (max + 10));
+    vetStati = (stato *) malloc(sizeof(stato) * (contaStati + 1));  //alloco vettore stati più un posto per lo stato base
+
+    dimFrasi = max + 10;
+
+    isIstrIn = 0;
+    contaUndo = 0;
+    printFatte = 0;
+    numIstrStackMod = 0;
+    numIstrStackRedo = 0;
+
+    //salvo lo stato iniziale vuoto
+    vetStati[hStati + 1].frasi = vetFrasi;
+    vetStati[hStati + 1].hFrasi = -2;  //vuol dire che vetFrasi è vuoto
+    hStati ++;
+
+    while (printFatte < contaPrint) {
+
+        idIstr = idIstr + 1; //incremento id istruzione
+        if (isIstrIn == 0)
+            fgets(vetIstr, DIMSTRINGA, stdin);
+
+        isIstrIn = 0;
+
+        i = 0;
+        while (vetIstr[i + 1] != '\0') {
+            i++;
+        }
+
+        if (vetIstr[i] == '\n') {
+            vetIstr[i] = '\0';
+            i = i - 1;
+        }
+
+        if (vetIstr[i] == 'q')
+            break;
+
+        switch (vetIstr[i]) {
+            case 'c':
+                numIstrStackMod = numIstrStackMod + 1;
+
+                vetIstr[i] = '\0';
+                leggiInd1_Ind2(&ind1, &ind2, vetIstr);
+
+                /*if (ind2 + 1 >= dimFrasi) {
+                    dimFrasi = dimFrasi + DIMSTRUTTURE + numFrasi;
+                    vetFrasi = (char **) realloc(vetFrasi, dimFrasi * sizeof(char *));
+                }*/
+
+                //dopo che è stata eseguita una nuova istruzione, resetto contaUndo
+                contaUndo = 0;
+                numIstrStackRedo = 0;
+
+                numFrasi = ind2 - ind1 + 1;
+
+                for (i = 0; i < numFrasi; i++) {
+                    fgets(vetFraseAppo, DIMSTRINGA, stdin);
+                    len = strlen(vetFraseAppo);
+                    indMalloc = (char *) malloc((sizeof(char) * (len + 1)));
+                    strcpy(indMalloc, vetFraseAppo);
+
+                    if (setUndo == 0) {
+                        if (ind1 + i < hFrasi)
+                            free(vetFrasi[ind1 + i]);
+                    }
+                    vetFrasi[ind1 + i] = indMalloc;
+                }
+
+                if (ind2 > hFrasi) {
+                    hFrasi = ind2;
+                }
+
+                fgets(vetIstr, DIMSTRINGA, stdin); //leggo il punto dopo la serie di frasi
+
+                if(setUndo != 0) {
+                    //salvo lo stato di vetFrasi dopo la modifica
+                    vetFrasiAppo = copiaVetFrasi(vetFrasi, hFrasi, dimFrasi);
+                    vetStati[hStati + 1].frasi = vetFrasiAppo;
+                    vetStati[hStati + 1].hFrasi = hFrasi;
+                    hStati++;
+                }
+                break;
+
+            case 'd':
+                numIstrStackMod = numIstrStackMod + 1;
+                vetIstr[i] = '\0';
+                leggiInd1_Ind2(&ind1, &ind2, vetIstr);
+
+                numFrasi = ind2 - ind1 + 1;
+
+                //dopo che è stata eseguita una nuova istruzione, resetto contaUndo
+                contaUndo = 0;
+                numIstrStackRedo = 0;
+
+                if (ind1 <= hFrasi) {
+                    if (ind2 < hFrasi) {
+                        //eseguo la delete
+                        j = 0;
+                        i = ind2 + 1;
+                        while (i <= hFrasi) {
+                            vetFrasi[ind1 + j] = vetFrasi[ind2 + 1 + j];
+                            i = i + 1;
+                            j = j + 1;
+                        }
+                        hFrasi = hFrasi - numFrasi;
+
+                        if(setUndo != 0) {
+                            vetFrasiAppo = copiaVetFrasi(vetFrasi, hFrasi, dimFrasi);
+
+                            vetStati[hStati + 1].frasi = vetFrasiAppo;
+                            if (hFrasi == -1)
+                                vetStati[hStati + 1].hFrasi = -1;  //vuol dire che vetFrasi è vuoto
+                            else
+                                vetStati[hStati + 1].hFrasi = hFrasi;
+                            hStati++;
+                        }
+
+                    } else {
+                        //eseguo la delete spostando solamente la testa
+                        hFrasi = hFrasi - (hFrasi - ind1 + 1);
+                        //poi copio lo stato
+                        vetFrasiAppo = copiaVetFrasi(vetFrasi, hFrasi, dimFrasi);
+                        vetStati[hStati + 1].frasi = vetFrasiAppo;
+                        if(hFrasi == -1)
+                            vetStati[hStati + 1].hFrasi = -1;  //vuol dire che vetFrasi è vuoto
+                        else
+                            vetStati[hStati + 1].hFrasi = hFrasi;
+                        hStati ++;
+                    }
+                } else {
+                    //la delete non fa nulla
+                    vetFrasiAppo = copiaVetFrasi(vetFrasi, hFrasi, dimFrasi);
+                    vetStati[hStati + 1].frasi = vetFrasiAppo;
+                    vetStati[hStati + 1].hFrasi = hFrasi;
+                    hStati ++;
+                }
+                break;
+
+            case 'p':
+                vetIstr[i] = '\0';
+                //dopo che è stata eseguita una nuova istruzione, resetto contaUndo
+                contaUndo = 0;
+                leggiInd1_Ind2(&ind1, &ind2, vetIstr);
+
+                printFatte = printFatte + 1;
+                if (ind1 < 0) {
+                    puts(".");
+                } else {
+                    if (ind1 > hFrasi) {
+                        numPunti = ind2 - ind1 + 1;
+                        for (i = 0; i < numPunti; i++) {
+                            puts(".");
+                        }
+                    } else {
+                        if (ind2 > hFrasi) {
+                            //stampo un po di frasi
+                            numFrasi = hFrasi - ind1 + 1;
+                            for (i = 0; i < numFrasi; i++) {
+                                printf("%s", vetFrasi[ind1 + i]);
+                            }
+
+                            //E stampo un po di punti
+                            numPunti = ind2 - hFrasi;
+                            for (i = 0; i < numPunti; i++) {
+                                puts(".");
+                            }
+
+                        } else {
+                            numFrasi = ind2 - ind1 + 1;
+                            for (i = 0; i < numFrasi; i++) {
+                                printf("%s", vetFrasi[ind1 + i]);
+                            }
+                        }
+                    }
+                }
+                break;
+
+            case 'u':
+            case 'r':
+                if (vetIstr[i] == 'u') {
+                    vetIstr[i] = '\0';
+                    contaUndo = contaUndo + atoi(vetIstr);
+                } else if (vetIstr[i] == 'r') {
+                    vetIstr[i] = '\0';
+                    contaUndo = contaUndo - atoi(vetIstr);
+                }
+                repeat = 1;
+
+                if (contaUndo >= numIstrStackMod) {
+                    contaUndo = numIstrStackMod;
+                } else if (contaUndo < 0 && abs(contaUndo) >= numIstrStackRedo) {
+                    contaUndo = -numIstrStackRedo;
+                }
+
+                do {
+                    fgets(vetIstr, DIMSTRINGA, stdin);
+
+                    i = 0;
+                    while (vetIstr[i + 1] != '\0') {
+                        i++;
+                    }
+
+                    if (vetIstr[i] == '\n') {
+                        i = i - 1;
+                    }
+
+                    if (vetIstr[i] != 'u' && vetIstr[i] != 'r') {
+                        repeat = 0;
+                        isIstrIn = 1;
+                    } else {
+                        if (vetIstr[i] == 'u') {
+                            vetIstr[i] = '\0';
+                            appoUndo = atoi(vetIstr);
+
+                            if (contaUndo + appoUndo < numIstrStackMod)
+                                contaUndo = contaUndo + appoUndo;
+                            else {
+                                contaUndo = numIstrStackMod;
+                            }
+                        } else {
+                            if (vetIstr[i] == 'r') {
+                                vetIstr[i] = '\0';
+                                appoRedo = atoi(vetIstr);
+                                if (contaUndo - appoRedo > 0 || abs(contaUndo - appoRedo) < numIstrStackRedo) {
+                                    contaUndo = contaUndo - appoRedo;
+                                } else {
+                                    contaUndo = -numIstrStackRedo;
+                                }
+                            }
+                        }
+                    }
+                } while (repeat == 1);
+
+                if (contaUndo > 0) { // undo
+
+                    hStati = hStati - contaUndo;
+                    hFrasi = vetStati[hStati].hFrasi;
+                    for(i = 0; i <= hFrasi; i++)
+                        vetFrasi[i] = vetStati[hStati].frasi[i];
+
+                    numIstrStackRedo = numIstrStackRedo + contaUndo;
+                    numIstrStackMod = numIstrStackMod - contaUndo;
+                } else {
+                    if (contaUndo < 0) {
+                        contaUndo = -contaUndo;
+
+                        hStati = hStati + contaUndo;
+                        hFrasi = vetStati[hStati].hFrasi;
+                        for(i = 0; i <= hFrasi; i++)
+                            vetFrasi[i] = vetStati[hStati].frasi[i];
+
+                        numIstrStackMod = numIstrStackMod + contaUndo;
+                        numIstrStackRedo = numIstrStackRedo - contaUndo;
+                    }
+                    //else contaUndo == 0 => non faccio niente
+                }
+                break;
+        }
+    }
+
+    //libero tutti gli elementi di vetFrasi
+    for (i = 0; i <= hFrasi; i++)
+        free(vetFrasi[i]);
+
+    free(vetFrasi);
+    free(vetStati);
+
+    return 0;
+}
+
+void leggiInd1_Ind2(int *ind1, int *ind2, char *vetIstr) {
+    char *token; // Pezzo di istruzione
+
+    token = strtok(vetIstr, VIRGOLA);
+    if (token != NULL) {
+        *ind1 = atoi(token) - 1; //Rendo il valore direttamente utilizzabile nel vettore
+
+        //prendo il secondo indirizzo
+        token = strtok(NULL, VIRGOLA);
+        if (token != NULL) {
+            *ind2 = atoi(token) - 1; //Rendo il valore direttamente utilizzabile nel vettore
+        } else {
+            printf("Il separatore , non esiste");
+        }
+    } else {
+        printf("Il separatore , non esiste");
+    }
+}
+
+char** copiaVetFrasi(char **vetFrasi, int hFrasi, int dimFrasi){
+    char **vetFrasiAppo;
+    int i;
+
+    vetFrasiAppo = (char **) malloc(sizeof(char *) * dimFrasi);
+    for (i = 0; i <= hFrasi; i++) {
+        vetFrasiAppo[i] = vetFrasi[i];
+    }
+    return vetFrasiAppo;
+}
+
+void visStati(stato *vetStati, int hStati){
+    int i, j;
+    int hFrasi;
+    char **vetFrasi;
+
+    for(i=0; i <= hStati; i++){
+        hFrasi = vetStati[i].hFrasi;
+        vetFrasi = vetStati[i].frasi;
+        for(j=0; j <= hFrasi; j++){
+            printf("%s", vetFrasi[j]);
+        }
+        printf("-\n");
+    }
+    printf("\n\n");
+}
